@@ -2,11 +2,11 @@
     "KPlugin": {
         "Authors": [
             {
-                "Name": "Dnftech"
+                "Name": "Axo"
             }
         ],
-        "Id": "Alnix",
+        "Id": "AlnixBubbles",
         "License": "GPL-3.0-or-later",
-        "Name": "Alnix"
+        "Name": "Alnix Bubbles"
     }
 }
