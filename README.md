@@ -11,7 +11,7 @@ It comes with a graphical installer, takes a snapshot before every system change
 ## Features
 
 - **Graphical installer.** The installer opens automatically when the live desktop starts. It works offline, and the "Erase disk" option sets up everything, with optional disk encryption. Windows and other operating systems are detected for dual boot.
-- **Undo for mistakes.** Alnix uses the Btrfs filesystem with [Snapper](https://github.com/openSUSE/snapper). A snapshot is taken before every update or package change, and a permanent "Fresh Alnix install" snapshot is kept. If an update breaks something, you can boot an earlier snapshot from the boot menu and restore it with Btrfs Assistant.
+- **Undo for mistakes.** Alnix uses the Btrfs filesystem with [Snapper](https://github.com/openSUSE/snapper). A snapshot is taken before every system update or system package change, and a permanent "Fresh Alnix install" snapshot is kept. If an update breaks something, you can boot an earlier snapshot from the boot menu and restore it with Btrfs Assistant.
 - **One-click updates.** Discover shows a notification when updates are ready. Apps come from the Arch repositories and from Flathub.
 - **Low maintenance.** Package mirrors are refreshed weekly, the Arch signing keys stay up to date, old cached packages are cleaned up, and SSDs are trimmed on a schedule.
 - **Safe defaults.** The firewall (ufw) is on, and the root account is locked. System changes ask for your own password, and SSH is off.
