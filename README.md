@@ -4,7 +4,9 @@ Alnix is an Arch Linux–based distribution with the KDE Plasma desktop, built t
 
 It comes with a graphical installer, takes a snapshot before every system change so mistakes can be undone, and installs apps and updates through Discover. You shouldn't need a terminal for everyday use.
 
-> **Status:** early development. The installer has not yet been tested on real hardware, so try it in a virtual machine first.
+> **Status:** early development. The installer has barely been tested on real hardware, so try it in a virtual machine first.
+
+![Alnix Screenshot](screenshots/alnix.jpeg)
 
 ## Features
 
@@ -87,9 +89,3 @@ To add software to Alnix, add it to `alnix/packages.x86_64`. Because the install
 Alnix is licensed under the [GNU General Public License v3.0](LICENSE).
 
 Alnix is not affiliated with or endorsed by Arch Linux.
-
-## Collaborators
-
-If you are into expermental package managers then try out...
-
-https://github.com/shroomstech/curse
