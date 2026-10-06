@@ -1,0 +1,87 @@
+name: Build ISO
+
+# Builds the Alnix bootable ISO with mkarchiso and uploads it as an artifact.
+#
+# This is an expensive build: it compiles Calamares (and friends) from the AUR
+# inside a chroot and then produces a full live image. It therefore does NOT run
+# on every push or pull request -- fast checks live in the separate `ci.yml`
+# workflow. This workflow only runs when manually triggered or when a release
+# tag (v*) is pushed.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize ISO builds and never cancel an in-progress one: a release build is
+  # far too expensive to interrupt partway through.
+  group: build-iso
+  cancel-in-progress: false
+
+jobs:
+  build-iso:
+    name: Build ISO
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          # The ISO, the build chroot, and the AUR package builds are large, so
+          # reclaim space taken by unused preinstalled toolchains on the runner.
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/share/powershell \
+            /usr/share/swift \
+            /opt/hostedtoolcache/CodeQL
+          df -h
+
+      - name: Build ISO in privileged Arch Linux container
+        run: |
+          docker run --privileged --rm \
+            -v "$PWD":/work \
+            -w /work \
+            archlinux:latest \
+            bash -c '
+              set -euo pipefail
+
+              # The container must run with --privileged because build-repo.sh
+              # bind-mounts its chroot onto itself (`mount --bind`), uses
+              # `pacstrap`, and enters the chroot with `arch-chroot`; all of
+              # these require CAP_SYS_ADMIN. Everything runs as root (the
+              # container default), which build-iso.sh/build-repo.sh require.
+
+              # Initialize the Arch keyring, then refresh it before installing
+              # anything so package signatures verify (the image ships a stale
+              # keyring).
+              pacman-key --init
+              pacman-key --populate archlinux
+              pacman -Syu --noconfirm
+
+              # Tools required by the build scripts and README.
+              pacman -S --noconfirm --needed \
+                archiso arch-install-scripts git base-devel sudo
+
+              # Builds repo/x86_64 (Calamares etc., from the AUR) on first run
+              # and then the ISO into out/.
+              bash ./build-iso.sh
+            '
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alnix-iso
+          path: out/*.iso
+          if-no-files-found: error
+          retention-days: 14

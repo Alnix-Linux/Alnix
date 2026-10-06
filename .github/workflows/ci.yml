@@ -1,0 +1,258 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    name: Lint shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Syntax check and shellcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Scripts with a POSIX sh shebang.
+          sh_scripts=(
+            alnix/airootfs/usr/local/bin/alnix-install
+            alnix/airootfs/usr/local/bin/Installation_guide
+          )
+          # Scripts with a bash shebang.
+          bash_scripts=(
+            build-iso.sh
+            build-repo.sh
+            alnix/profiledef.sh
+            alnix/airootfs/root/.automated_script.sh
+            alnix/airootfs/usr/lib/alnix-installer/cleanup-live
+            alnix/airootfs/usr/lib/alnix-installer/finalize
+            alnix/airootfs/usr/local/bin/choose-mirror
+            alnix/airootfs/usr/local/bin/livecd-sound
+            alnix/airootfs/usr/share/plymouth/themes/alnix-plymouth/preview.sh
+          )
+          for script in "${sh_scripts[@]}"; do
+            sh -n "$script"
+          done
+          for script in "${bash_scripts[@]}"; do
+            bash -n "$script"
+          done
+          # --severity=warning is deliberate: preview.sh carries a pre-existing
+          # SC2086 note (info severity) that we do not want to fail on.
+          shellcheck --severity=warning "${sh_scripts[@]}" "${bash_scripts[@]}"
+          echo "shellcheck OK (${#sh_scripts[@]} sh scripts, ${#bash_scripts[@]} bash scripts)"
+
+  config-validation:
+    name: Validate Calamares and JSON config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: python3 -m pip install pyyaml
+
+      - name: Validate config files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob
+          import json
+          import os
+          import re
+          import sys
+
+          import yaml
+
+
+          def strip_jsonc_comments(text):
+              """Strip // and /* */ comments while respecting string literals."""
+              out = []
+              i = 0
+              n = len(text)
+              in_string = False
+              while i < n:
+                  c = text[i]
+                  if in_string:
+                      out.append(c)
+                      if c == "\\" and i + 1 < n:
+                          out.append(text[i + 1])
+                          i += 2
+                          continue
+                      if c == '"':
+                          in_string = False
+                      i += 1
+                      continue
+                  if c == '"':
+                      in_string = True
+                      out.append(c)
+                      i += 1
+                      continue
+                  if c == "/" and i + 1 < n and text[i + 1] == "/":
+                      while i < n and text[i] != "\n":
+                          i += 1
+                      continue
+                  if c == "/" and i + 1 < n and text[i + 1] == "*":
+                      i += 2
+                      while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+                          i += 1
+                      i += 2
+                      continue
+                  out.append(c)
+                  i += 1
+              return "".join(out)
+
+
+          errors = []
+          root = "alnix/airootfs"
+          settings_path = os.path.join(root, "etc/calamares/settings.conf")
+          modules_dir = os.path.join(root, "etc/calamares/modules")
+
+          # 1. settings.conf must parse as a top-level YAML mapping.
+          with open(settings_path, encoding="utf-8") as fh:
+              settings = yaml.safe_load(fh)
+          if not isinstance(settings, dict):
+              errors.append(f"{settings_path}: top-level YAML must be a mapping")
+
+          # 2. Every modules/*.conf must parse as YAML.
+          conf_files = sorted(glob.glob(os.path.join(modules_dir, "*.conf")))
+          if not conf_files:
+              errors.append(f"{modules_dir}: no *.conf files found")
+          for conf in conf_files:
+              with open(conf, encoding="utf-8") as fh:
+                  yaml.safe_load(fh)
+
+          # 3. Every instances[].config referenced in settings.conf must exist
+          #    under modules/. Built-in modules in `sequence` have no local conf.
+          instances = settings.get("instances", []) if isinstance(settings, dict) else []
+          for idx, inst in enumerate(instances):
+              if not isinstance(inst, dict):
+                  errors.append(f"{settings_path}: instances[{idx}] is not a mapping")
+                  continue
+              config = inst.get("config")
+              if config is None:
+                  continue
+              if not os.path.isfile(os.path.join(modules_dir, config)):
+                  errors.append(
+                      f"{settings_path}: instances[{idx}].config references missing modules/{config}"
+                  )
+
+          # 4. Every metadata.json must parse as JSON.
+          wallpapers = sorted(glob.glob(os.path.join(root, "usr/share/wallpapers/*/metadata.json")))
+          if not wallpapers:
+              errors.append(f"{root}/usr/share/wallpapers: no metadata.json files found")
+          metadata_files = wallpapers + [
+              os.path.join(root, "usr/share/plasma/look-and-feel/org.alnix.desktop/metadata.json")
+          ]
+          for meta in metadata_files:
+              with open(meta, encoding="utf-8") as fh:
+                  json.load(fh)
+
+          # 5. config.jsonc must parse as JSON after stripping comments and
+          #    trailing commas.
+          jsonc_path = os.path.join(root, "etc/xdg/fastfetch/config.jsonc")
+          with open(jsonc_path, encoding="utf-8") as fh:
+              raw = fh.read()
+          raw = strip_jsonc_comments(raw)
+          raw = re.sub(r",(\s*[}\]])", r"\1", raw)
+          json.loads(raw)
+
+          if errors:
+              for err in errors:
+                  print(err, file=sys.stderr)
+              sys.exit(1)
+
+          print(
+              f"config-validation OK: {len(conf_files)} module .conf files, "
+              f"{len(metadata_files)} metadata.json files, settings.conf, config.jsonc"
+          )
+          PY
+
+  profile-validation:
+    name: Validate archiso profile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required artifacts and packages list
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            alnix/profiledef.sh
+            alnix/packages.x86_64
+            alnix/pacman.conf
+            alnix/airootfs
+            alnix/syslinux
+            alnix/grub
+            alnix/efiboot
+            alnix/syslinux/syslinux.cfg
+            alnix/grub/grub.cfg
+            alnix/efiboot/loader/loader.conf
+          )
+          for path in "${required[@]}"; do
+            if [[ ! -e "$path" ]]; then
+              echo "missing required archiso artifact: $path" >&2
+              exit 1
+            fi
+          done
+
+          packages=alnix/packages.x86_64
+          if grep -nE '^[[:space:]]*$' "$packages"; then
+            echo "packages.x86_64 contains a blank line" >&2
+            exit 1
+          fi
+          if grep -nE '(^[[:space:]]|[[:space:]]$)' "$packages"; then
+            echo "packages.x86_64 contains leading/trailing whitespace" >&2
+            exit 1
+          fi
+          if grep -n '#' "$packages"; then
+            echo "packages.x86_64 contains an inline comment" >&2
+            exit 1
+          fi
+          duplicates=$(sort "$packages" | uniq -d)
+          if [[ -n "$duplicates" ]]; then
+            echo "packages.x86_64 contains duplicate entries:" >&2
+            echo "$duplicates" >&2
+            exit 1
+          fi
+          echo "packages.x86_64: $(wc -l < "$packages") unique package entries"
+
+      - name: Validate file_permissions paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Declare the associative array before sourcing so the
+          # ["/path"]="0:0:400" entries in profiledef.sh are parsed correctly.
+          declare -A file_permissions=()
+          # shellcheck disable=SC1091
+          source alnix/profiledef.sh
+          for key in "${!file_permissions[@]}"; do
+            path="alnix/airootfs${key}"
+            if [[ ! -e "$path" ]]; then
+              echo "file_permissions key missing on disk: $key -> $path" >&2
+              exit 1
+            fi
+          done
+          echo "file_permissions: ${#file_permissions[@]} keys all present"
