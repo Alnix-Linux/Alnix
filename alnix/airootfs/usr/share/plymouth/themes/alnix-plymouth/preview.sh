@@ -7,5 +7,5 @@ fi
 
 plymouthd
 plymouth --show-splash
-sleep ${1:-2}
+sleep "${1:-2}"
 plymouth quit

@@ -51,7 +51,14 @@ if ! mountpoint -q "$chroot_dir"; then
     trap 'umount "$chroot_dir"' EXIT
 fi
 
-pacstrap -C "${root_dir}/alnix/pacman.conf" -c -M "$chroot_dir" --needed base-devel git "${deps[@]}"
+# The profile reads the Arch mirrors from mirrorlist-arch, as on Arch-based
+# hosts such as Artix. Stock Arch only has mirrorlist, so fall back to that.
+mirrorlist=/etc/pacman.d/mirrorlist-arch
+[[ -f "$mirrorlist" ]] || mirrorlist=/etc/pacman.d/mirrorlist
+pacman_conf="${root_dir}/work/pacman-buildroot.conf"
+sed "s|/etc/pacman.d/mirrorlist-arch|${mirrorlist}|" "${root_dir}/alnix/pacman.conf" > "$pacman_conf"
+
+pacstrap -C "$pacman_conf" -c -M "$chroot_dir" --needed base-devel git "${deps[@]}"
 
 if ! arch-chroot "$chroot_dir" id builder &>/dev/null; then
     arch-chroot "$chroot_dir" useradd -m builder

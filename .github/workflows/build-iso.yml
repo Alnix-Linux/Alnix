@@ -47,6 +47,27 @@ jobs:
             /opt/hostedtoolcache/CodeQL
           df -h
 
+      - name: Get AUR package versions
+        id: aur
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Cache key for the local repository: the AUR recipes' current
+          # commits plus today's date. The date keeps a cached Calamares from
+          # outliving the Arch libraries it was compiled against, so the cache
+          # only saves time when the workflow is re-run on the same day.
+          eval "$(grep '^aur_packages=' build-repo.sh)"
+          heads=$(for pkg in "${aur_packages[@]}"; do
+            git ls-remote "https://aur.archlinux.org/${pkg}.git" HEAD | cut -f1
+          done | sha256sum | cut -c1-16)
+          echo "key=alnix-repo-$(date -u +%F)-${heads}-${{ hashFiles('build-repo.sh', 'alnix/pacman.conf') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore local package repository
+        uses: actions/cache@v4
+        with:
+          path: repo
+          key: ${{ steps.aur.outputs.key }}
+
       - name: Build ISO in privileged Arch Linux container
         run: |
           docker run --privileged --rm \
@@ -67,11 +88,10 @@ jobs:
               # keyring).
               pacman-key --init
               pacman-key --populate archlinux
-              pacman -Syu --noconfirm
 
-              # Tools required by the build scripts and README.
-              pacman -S --noconfirm --needed \
-                archiso arch-install-scripts git base-devel sudo
+              # Update, and install the tools required by the build scripts.
+              pacman -Syu --noconfirm --needed \
+                archiso arch-install-scripts git base-devel
 
               # Builds repo/x86_64 (Calamares etc., from the AUR) on first run
               # and then the ISO into out/.
@@ -84,4 +104,6 @@ jobs:
           name: alnix-iso
           path: out/*.iso
           if-no-files-found: error
+          # The ISO is already compressed; zipping it again only costs time.
+          compression-level: 0
           retention-days: 14

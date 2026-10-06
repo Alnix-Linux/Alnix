@@ -19,11 +19,16 @@ if [[ "${1:-}" == "--rebuild-repo" || ! -f "${repo_dir}/alnix-local.db" ]]; then
     "${root_dir}/build-repo.sh"
 fi
 
+# The profile reads the Arch mirrors from mirrorlist-arch, as on Arch-based
+# hosts such as Artix. Stock Arch only has mirrorlist, so fall back to that.
+mirrorlist=/etc/pacman.d/mirrorlist-arch
+[[ -f "$mirrorlist" ]] || mirrorlist=/etc/pacman.d/mirrorlist
+
 # mkarchiso needs an absolute path to the local repo, so generate the final
 # pacman.conf here instead of hardcoding a path into the profile.
 mkdir -p "$work_dir"
 {
-    cat "${root_dir}/alnix/pacman.conf"
+    sed "s|/etc/pacman.d/mirrorlist-arch|${mirrorlist}|" "${root_dir}/alnix/pacman.conf"
     printf '\n[alnix-local]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$repo_dir"
 } > "${work_dir}/pacman.conf"
 

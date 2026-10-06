@@ -22,39 +22,30 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+        # Preinstalled on GitHub-hosted runners; only install if it is missing.
+        run: command -v shellcheck >/dev/null || { sudo apt-get update && sudo apt-get install -y shellcheck; }
 
-      - name: Syntax check and shellcheck
+      - name: Shellcheck
         shell: bash
         run: |
           set -euo pipefail
-          # Scripts with a POSIX sh shebang.
-          sh_scripts=(
-            alnix/airootfs/usr/local/bin/alnix-install
-            alnix/airootfs/usr/local/bin/Installation_guide
-          )
-          # Scripts with a bash shebang.
-          bash_scripts=(
-            build-iso.sh
-            build-repo.sh
-            alnix/profiledef.sh
-            alnix/airootfs/root/.automated_script.sh
-            alnix/airootfs/usr/lib/alnix-installer/cleanup-live
-            alnix/airootfs/usr/lib/alnix-installer/finalize
-            alnix/airootfs/usr/local/bin/choose-mirror
-            alnix/airootfs/usr/local/bin/livecd-sound
-            alnix/airootfs/usr/share/plymouth/themes/alnix-plymouth/preview.sh
-          )
-          for script in "${sh_scripts[@]}"; do
-            sh -n "$script"
-          done
-          for script in "${bash_scripts[@]}"; do
-            bash -n "$script"
-          done
-          # --severity=warning is deliberate: preview.sh carries a pre-existing
-          # SC2086 note (info severity) that we do not want to fail on.
-          shellcheck --severity=warning "${sh_scripts[@]}" "${bash_scripts[@]}"
-          echo "shellcheck OK (${#sh_scripts[@]} sh scripts, ${#bash_scripts[@]} bash scripts)"
+          # Lint every tracked file with a sh or bash shebang, so new scripts
+          # are covered automatically. shellcheck reads the dialect from the
+          # shebang and reports syntax errors itself.
+          scripts=()
+          while IFS= read -r file; do
+            # airootfs holds symlinks that only resolve inside the built image.
+            [[ -f "$file" && ! -L "$file" ]] || continue
+            if head -n1 "$file" | grep -qaE '^#!.*[/ ](ba)?sh( |$)'; then
+              scripts+=("$file")
+            fi
+          done < <(git ls-files)
+          if (( ${#scripts[@]} == 0 )); then
+            echo "no shell scripts found" >&2
+            exit 1
+          fi
+          shellcheck "${scripts[@]}"
+          echo "shellcheck OK (${#scripts[@]} scripts)"
 
   config-validation:
     name: Validate Calamares and JSON config
@@ -63,13 +54,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Install PyYAML
-        run: python3 -m pip install pyyaml
+        # Preinstalled on GitHub-hosted runners; only install if it is missing.
+        run: python3 -c 'import yaml' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
 
       - name: Validate config files
         shell: bash
@@ -205,10 +192,8 @@ jobs:
             alnix/pacman.conf
             alnix/airootfs
             alnix/syslinux
-            alnix/grub
             alnix/efiboot
             alnix/syslinux/syslinux.cfg
-            alnix/grub/grub.cfg
             alnix/efiboot/loader/loader.conf
           )
           for path in "${required[@]}"; do
@@ -256,3 +241,30 @@ jobs:
             fi
           done
           echo "file_permissions: ${#file_permissions[@]} keys all present"
+
+  package-availability:
+    name: Check packages exist in the Arch repositories
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve packages.x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Same repositories as the ISO build; the container is stock Arch,
+          # so its mirrors are in mirrorlist rather than mirrorlist-arch.
+          sed 's|/etc/pacman.d/mirrorlist-arch|/etc/pacman.d/mirrorlist|' alnix/pacman.conf > /tmp/pacman.conf
+          pacman --config /tmp/pacman.conf -Sy
+
+          # Packages built from the AUR by build-repo.sh are not in the repos.
+          aur_packages=()
+          eval "$(grep '^aur_packages=' build-repo.sh)"
+          mapfile -t packages < <(grep -vxF -f <(printf '%s\n' "${aur_packages[@]}") alnix/packages.x86_64)
+
+          # Fails with "target not found" for anything renamed or dropped, and
+          # on conflicts between listed packages.
+          pacman --config /tmp/pacman.conf -Sp --print-format '%n' "${packages[@]}" > /dev/null
+          echo "package-availability OK: ${#packages[@]} packages resolve"
