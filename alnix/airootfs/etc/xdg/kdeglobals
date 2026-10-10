@@ -1,2 +1,5 @@
 [KDE]
 LookAndFeelPackage=org.alnix.desktop
+
+[Icons]
+Theme=Papirus-Dark

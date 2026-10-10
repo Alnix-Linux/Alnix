@@ -1,4 +1,5 @@
 alsa-utils
+alnix-store
 amd-ucode
 arch-install-scripts
 ark
@@ -23,7 +24,6 @@ cups
 ddrescue
 dhcpcd
 diffutils
-discover
 dmidecode
 dmraid
 dnsmasq
@@ -133,6 +133,7 @@ os-prober
 packagekit-qt6
 pacman-contrib
 partclone
+papirus-icon-theme
 parted
 pcsclite
 pipewire

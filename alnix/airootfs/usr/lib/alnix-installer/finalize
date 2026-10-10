@@ -25,6 +25,10 @@ if [[ "$(stat -f -c %T /)" == btrfs ]] && btrfs subvolume show /.snapshots &>/de
 
     systemctl enable snapper-cleanup.timer grub-btrfsd.service
 
+    # Give the snapshots submenu the theme's snapshots icon. grub-btrfs has no
+    # option for a menu class, so it is passed along inside the quoted title.
+    echo "GRUB_BTRFS_SUBMENUNAME=\"Alnix snapshots' --class snapshots --class 'os\"" >> /etc/default/grub-btrfs/config
+
     # A permanent baseline to return to, then add it to the GRUB menu.
     snapper --no-dbus -c root create --description "Fresh Alnix install"
     grub-mkconfig -o /boot/grub/grub.cfg

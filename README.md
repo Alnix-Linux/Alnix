@@ -75,6 +75,7 @@ The build uses these folders:
 | `alnix/profiledef.sh` | ISO name, boot modes and file permissions |
 | `alnix/airootfs/` | Files copied into the system as-is |
 | `alnix/airootfs/etc/calamares/` | Installer configuration, branding and slideshow |
+| `alnix/airootfs/usr/share/grub/themes/alnix/` | GRUB theme for installed systems, based on [Graphite](https://github.com/vinceliuice/Graphite-gtk-theme) |
 | `alnix/airootfs/usr/lib/alnix-installer/` | Scripts that turn the live system into an installed system |
 | `alnix/syslinux/`, `alnix/grub/`, `alnix/efiboot/` | Boot menus for BIOS and UEFI |
 

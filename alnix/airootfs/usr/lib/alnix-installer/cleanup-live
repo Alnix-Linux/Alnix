@@ -52,5 +52,5 @@ install -Dm644 /usr/share/alnix/alnix-branding.hook /etc/pacman.d/hooks/alnix-br
 # The pacman keyring was a tmpfs in the live session; create a real one.
 rm -rf /etc/pacman.d/gnupg
 pacman-key --init
-pacman-key --populate archlinux
+pacman-key --populate archlinux alnix
 gpgconf --homedir /etc/pacman.d/gnupg --kill all || true
