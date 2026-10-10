@@ -257,6 +257,12 @@ jobs:
           # Same repositories as the ISO build; the container is stock Arch,
           # so its mirrors are in mirrorlist rather than mirrorlist-arch.
           sed 's|/etc/pacman.d/mirrorlist-arch|/etc/pacman.d/mirrorlist|' alnix/pacman.conf > /tmp/pacman.conf
+
+          # required for the custom repo to work correctly
+          pacman-key --init
+          pacman-key --recv-keys 1C617A4BAE12933C7AE7C7907E0E294350FC5FBE --keyserver keys.openpgp.org
+          pacman-key --lsign-key 1C617A4BAE12933C7AE7C7907E0E294350FC5FBE
+
           pacman --config /tmp/pacman.conf -Sy
 
           # Packages built from the AUR by build-repo.sh are not in the repos.

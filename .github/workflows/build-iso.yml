@@ -89,6 +89,10 @@ jobs:
               pacman-key --init
               pacman-key --populate archlinux
 
+              # required for the custom repo to work correctly
+              pacman-key --recv-keys 1C617A4BAE12933C7AE7C7907E0E294350FC5FBE --keyserver keys.openpgp.org
+              pacman-key --lsign-key 1C617A4BAE12933C7AE7C7907E0E294350FC5FBE
+
               # Update, and install the tools required by the build scripts.
               pacman -Syu --noconfirm --needed \
                 archiso arch-install-scripts git base-devel
