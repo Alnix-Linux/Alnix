@@ -149,7 +149,8 @@ jobs:
           if not wallpapers:
               errors.append(f"{root}/usr/share/wallpapers: no metadata.json files found")
           metadata_files = wallpapers + [
-              os.path.join(root, "usr/share/plasma/look-and-feel/org.alnix.desktop/metadata.json")
+              os.path.join(root, "usr/share/plasma/look-and-feel/org.alnix.desktop/metadata.json"),
+              os.path.join(root, "usr/share/plasma/look-and-feel/org.alnix.light.desktop/metadata.json"),
           ]
           for meta in metadata_files:
               with open(meta, encoding="utf-8") as fh:

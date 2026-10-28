@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build the AUR packages Alnix needs (the Calamares installer) into a local
-# pacman repository at repo/x86_64, which build-iso.sh feeds to mkarchiso.
+# Build the AUR packages Alnix needs (the Calamares installer and yay) into a
+# local pacman repository at repo/x86_64, which build-iso.sh feeds to mkarchiso.
 # Also builds the larp package for now
 #
 # Packages are built as an unprivileged user inside a clean Arch Linux chroot,
@@ -17,7 +17,7 @@ chroot_dir="${root_dir}/work/buildroot"
 src_dir="${root_dir}/work/aur"
 
 # Built in this order; later packages may depend on earlier ones.
-aur_packages=(ckbcomp calamares larp)
+aur_packages=(ckbcomp calamares larp yay)
 
 if (( EUID != 0 )); then
     echo "This script must be run as root: sudo $0" >&2
@@ -26,10 +26,10 @@ fi
 
 mkdir -p "$repo_dir" "$src_dir"
 
-# Fetch or update the AUR build recipes.
+
 for pkg in "${aur_packages[@]}"; do
     if [[ -d "${src_dir}/${pkg}/.git" ]]; then
-        git -C "${src_dir}/${pkg}" pull --ff-only
+        git -c safe.directory="${src_dir}/${pkg}" -C "${src_dir}/${pkg}" pull --ff-only
     else
         git clone "https://aur.archlinux.org/${pkg}.git" "${src_dir}/${pkg}"
     fi
@@ -67,6 +67,11 @@ fi
 for pkg in "${aur_packages[@]}"; do
     rm -rf "${chroot_dir}/home/builder/${pkg}"
     cp -r "${src_dir}/${pkg}" "${chroot_dir}/home/builder/${pkg}"
+    # The AUR recipe skips the packagechooser module, which the installer's
+    # Desktop, Theme and yay pages use.
+    if [[ "$pkg" == calamares ]]; then
+        sed -i '/^\s*packagechooser$/d' "${chroot_dir}/home/builder/${pkg}/PKGBUILD"
+    fi
     arch-chroot "$chroot_dir" chown -R builder:builder "/home/builder/${pkg}"
     arch-chroot "$chroot_dir" su builder -c "cd ~/${pkg} && makepkg --force --cleanbuild --noconfirm"
 

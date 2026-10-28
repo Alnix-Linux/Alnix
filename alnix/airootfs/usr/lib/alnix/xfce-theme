@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Started on each user's first Xfce login by the autostart entry apply-choices
+# writes. Applies the Alnix theme and wallpaper through xfconf, which Xfce
+# picks up straight away.
+#
+#   xfce-theme <dark|light>
+set -euo pipefail
+
+done_file="${XDG_CONFIG_HOME:-$HOME/.config}/alnix/xfce-theme-applied"
+[[ -e "$done_file" ]] && exit 0
+
+case "$1" in
+    dark)  gtk_theme=Breeze-Dark icons=Papirus-Dark ;;
+    light) gtk_theme=Breeze      icons=Papirus ;;
+    *)     echo "Unknown theme: $1" >&2; exit 1 ;;
+esac
+
+wallpaper=/usr/share/wallpapers/AlnixWaves/contents/images/3840x2160.png
+
+set_prop() {
+    xfconf-query --create -c "$1" -p "$2" -t "$3" -s "$4"
+}
+
+set_prop xsettings /Net/ThemeName string "$gtk_theme"
+set_prop xsettings /Net/IconThemeName string "$icons"
+set_prop xsettings /Gtk/CursorThemeName string breeze_cursors
+
+# xfdesktop keeps a wallpaper per monitor, keyed by the monitor's output name.
+set_prop xfce4-desktop /backdrop/single-workspace-mode bool true
+while read -r monitor; do
+    set_prop xfce4-desktop "/backdrop/screen0/monitor$monitor/workspace0/last-image" string "$wallpaper"
+    set_prop xfce4-desktop "/backdrop/screen0/monitor$monitor/workspace0/image-style" int 5
+done < <(xrandr --listmonitors | awk 'NR > 1 { print $NF }')
+
+mkdir -p "${done_file%/*}"
+touch "$done_file"

@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Run by the installer inside the new system, after cleanup-live this applies the
+# choices made on the Desktop, Theme and yay pages of the installer
+
+#I'm not here - Alex
+
+set -euo pipefail
+
+desktop="$1"
+theme="$2"
+yay="$3"
+
+wallpaper=/usr/share/wallpapers/AlnixWaves/contents/images/3840x2160.png
+
+case "$desktop" in
+    plasma) packages=() session="" ;;
+    gnome)  packages=(gnome) session=/usr/share/wayland-sessions/gnome.desktop ;;
+    xfce)   packages=(xfce4 xfce4-goodies network-manager-applet xorg-server xorg-xrandr) session=/usr/share/xsessions/xfce.desktop ;;
+    *)      echo "Unknown desktop: $desktop" >&2; exit 1 ;;
+esac
+
+# GNOME keeps Adwaita: libadwaita apps ignore GTK themes, so Breeze would
+# only restyle some of them.
+case "$theme" in
+    dark)  lookandfeel=org.alnix.desktop       icons=Papirus-Dark gtk_theme=Adwaita-dark color_scheme=prefer-dark ;;
+    light) lookandfeel=org.alnix.light.desktop icons=Papirus      gtk_theme=Adwaita      color_scheme=default ;;
+    *)     echo "Unknown theme: $theme" >&2; exit 1 ;;
+esac
+
+if (( ${#packages[@]} )); then
+    if ! pacman -Syu --needed --noconfirm "${packages[@]}"; then
+        echo "Installing the $desktop desktop failed. It needs an internet connection." >&2
+        exit 1
+    fi
+    printf '[Last]\nSession=%s\n' "$session" > /var/lib/sddm/state.conf
+    chown sddm:sddm /var/lib/sddm/state.conf
+fi
+
+sed -i -e "s/^LookAndFeelPackage=.*/LookAndFeelPackage=$lookandfeel/" \
+       -e "s/^Theme=.*/Theme=$icons/" \
+       /etc/xdg/kdeglobals
+
+if [[ "$desktop" == gnome ]]; then
+    mkdir -p /etc/dconf/profile /etc/dconf/db/local.d
+    printf 'user-db:user\nsystem-db:local\n' > /etc/dconf/profile/user
+    cat > /etc/dconf/db/local.d/00-alnix <<DCONF
+[org/gnome/desktop/interface]
+color-scheme='$color_scheme'
+gtk-theme='$gtk_theme'
+icon-theme='$icons'
+cursor-theme='breeze_cursors'
+accent-color='blue'
+
+[org/gnome/desktop/background]
+picture-uri='file://$wallpaper'
+picture-uri-dark='file://$wallpaper'
+DCONF
+    dconf update
+fi
+
+# Xfce stores the wallpaper per monitor, so it is themed at first login instead.
+if [[ "$desktop" == xfce ]]; then
+    cat > /etc/xdg/autostart/alnix-xfce-theme.desktop <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Alnix theme
+Exec=/usr/lib/alnix/xfce-theme $theme
+OnlyShowIn=XFCE;
+NoDisplay=true
+DESKTOP
+fi
+
+if [[ "$yay" == skip ]]; then
+    pacman -Rns --noconfirm yay
+fi

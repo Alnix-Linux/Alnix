@@ -1,7 +1,7 @@
 NAME="Alnix"
-PRETTY_NAME="Alnix (Creeper)"
-VERSION="Creeper"
-VERSION_CODENAME=creeper
+PRETTY_NAME="Alnix (Warden)"
+VERSION="Warden"
+VERSION_CODENAME=warden
 ID=alnix
 ID_LIKE=arch
 BUILD_ID=rolling
